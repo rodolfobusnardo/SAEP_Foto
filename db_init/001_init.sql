@@ -1,0 +1,29 @@
+-- =================================================================================================
+-- SCRIPT DE POPULAÇÃO COM NOVOS DADOS FICTÍCIOS E ALEATÓRIOS (VERSÃO CORRIGIDA)
+-- =================================================================================================
+
+-- --- SEÇÃO 1: RECRIAÇÃO DO BANCO DE DADOS ---
+DROP DATABASE IF EXISTS lost_and_found_db;
+CREATE DATABASE lost_and_found_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE lost_and_found_db;
+
+-- Adicionado para corrigir o erro de codificação de caracteres
+SET NAMES 'utf8mb4';
+
+-- --- SEÇÃO 2: DEFINIÇÃO DA ESTRUTURA (SCHEMA) ---
+CREATE TABLE `settings` ( `config_id` INT PRIMARY KEY DEFAULT 1, `unidade_nome` VARCHAR(255), `cnpj` VARCHAR(20), `endereco_rua` VARCHAR(255), `endereco_numero` VARCHAR(50), `endereco_bairro` VARCHAR(100), `endereco_cidade` VARCHAR(100), `endereco_estado` VARCHAR(50), `endereco_cep` VARCHAR(10), `declaration_donation_text` TEXT, `declaration_devolution_text` TEXT, `last_updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT check_single_row CHECK (config_id = 1) );
+CREATE TABLE `users` ( `id` INT AUTO_INCREMENT PRIMARY KEY, `username` VARCHAR(255) NOT NULL UNIQUE, `password` VARCHAR(255) NOT NULL, `full_name` VARCHAR(255), `role` ENUM('common', 'admin', 'superAdmin', 'admin-aprovador') NOT NULL DEFAULT 'common' );
+CREATE TABLE `categories` ( `id` INT AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL UNIQUE, `code` VARCHAR(10) NOT NULL UNIQUE );
+CREATE TABLE `locations` ( `id` INT AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL UNIQUE );
+CREATE TABLE `items` ( `id` INT AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL, `category_id` INT NOT NULL, `location_id` INT NOT NULL, `found_date` DATE NOT NULL, `description` TEXT, `image_path` VARCHAR(255) DEFAULT NULL, `barcode` VARCHAR(255) UNIQUE, `user_id` INT, `status` ENUM('Pendente', 'Devolvido', 'Doado', 'Descartado', 'Em Aprovação', 'Aprovado') NOT NULL DEFAULT 'Pendente', `status_changed_at` TIMESTAMP NULL DEFAULT NULL, `registered_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`), FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`), FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE SET NULL );
+CREATE TABLE `companies` ( `id` INT AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL, `cnpj` VARCHAR(20) DEFAULT NULL UNIQUE, `ie` VARCHAR(20) DEFAULT NULL, `responsible_name` VARCHAR(255) DEFAULT NULL, `phone` VARCHAR(20) DEFAULT NULL, `address_street` VARCHAR(255) DEFAULT NULL, `address_number` VARCHAR(50) DEFAULT NULL, `address_complement` VARCHAR(100) DEFAULT NULL, `address_neighborhood` VARCHAR(100) DEFAULT NULL, `address_city` VARCHAR(100) DEFAULT NULL, `address_state` VARCHAR(50) DEFAULT NULL, `address_cep` VARCHAR(10) DEFAULT NULL, `email` VARCHAR(255) DEFAULT NULL, `observations` TEXT DEFAULT NULL, `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active', `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP );
+CREATE TABLE `donation_terms` ( `term_id` INT AUTO_INCREMENT PRIMARY KEY, `user_id` INT, `responsible_donation` VARCHAR(255) NOT NULL, `donation_date` DATE NOT NULL, `donation_time` TIME NOT NULL, `company_id` INT DEFAULT NULL, `signature_image_path` VARCHAR(255) NULL, `status` ENUM('Em aprovação', 'Aprovado', 'Negado', 'Doado') NOT NULL, `reproval_reason` TEXT, `approved_at` TIMESTAMP NULL, `approved_by_user_id` INT, `reproved_at` TIMESTAMP NULL, `reproved_by_user_id` INT, `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, FOREIGN KEY (`user_id`) REFERENCES `users`(`id`), FOREIGN KEY (`approved_by_user_id`) REFERENCES `users`(`id`), FOREIGN KEY (`reproved_by_user_id`) REFERENCES `users`(`id`), FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) );
+CREATE TABLE `donation_term_items` ( `term_item_id` INT AUTO_INCREMENT PRIMARY KEY, `term_id` INT NOT NULL, `item_id` INT NOT NULL, FOREIGN KEY (`term_id`) REFERENCES `donation_terms`(`term_id`) ON DELETE CASCADE, FOREIGN KEY (`item_id`) REFERENCES `items`(`id`) ON DELETE RESTRICT );
+CREATE TABLE `devolution_documents` ( `id` INT AUTO_INCREMENT PRIMARY KEY, `item_id` INT NOT NULL UNIQUE, `returned_by_user_id` INT NOT NULL, `devolution_timestamp` DATETIME NOT NULL, `owner_name` VARCHAR(255) NOT NULL, `owner_address` TEXT NULL DEFAULT NULL, `owner_phone` VARCHAR(50) NULL DEFAULT NULL, `owner_credential_number` VARCHAR(100), `signature_image_path` VARCHAR(255) NOT NULL, `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (`item_id`) REFERENCES `items`(`id`), FOREIGN KEY (`returned_by_user_id`) REFERENCES `users`(`id`) );
+
+-- --- SEÇÃO 3: DADOS FIXOS E DE CONFIGURAÇÃO ---
+INSERT INTO `settings` (`config_id`, `unidade_nome`, `cnpj`, `endereco_rua`, `endereco_numero`, `endereco_bairro`, `endereco_cidade`, `endereco_estado`, `endereco_cep`, `declaration_donation_text`, `declaration_devolution_text`) VALUES
+(1, 'Pinheiros', '99.999.999/0001-99', 'Avenida de Teste', '123', 'Bairro Fictício', 'São Paulo', 'SP', '01234-567', 'Declaro para os devidos fins que o(s) item(ns) descrito(s) foi(ram) recebido(s) pela instituição [NOME_INSTITUICAO] através de doação do Sesc [NOME_UNIDADE].', 'Declaro que recebi o(s) item(ns) descrito(s), que reconheço como de minha propriedade, do setor de Achados e Perdidos do Sesc [NOME_UNIDADE].');
+
+INSERT INTO `users` (`id`, `username`, `password`, `full_name`, `role`) VALUES
+(1, 'admin', '$2y$10$DHK9TkhqOrEiZfAl8mqEVeBHUoUt7xDSy.ocHCrYud6.kbYOjJeyK', 'Administrador Padrão', 'superAdmin');

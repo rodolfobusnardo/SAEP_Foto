@@ -1,0 +1,12 @@
+[client]
+default-character-set=utf8mb4
+
+[mysql]
+default-character-set=utf8mb4
+
+[mysqld]
+# Estas podem ser redundantes se o 'command' no docker-compose.yml já as define,
+# mas não prejudica tê-las aqui para garantir.
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+skip-character-set-client-handshake

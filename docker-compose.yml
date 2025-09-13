@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  app:
+    container_name: saep_app
+    build: ./app
+    ports:
+      - "82:80"
+    volumes:
+      - ./src:/var/www/html
+    # ALTERAÇÃO: Adicionado o comando para instalar as dependências do Composer
+    # Isso garante que a pasta 'vendor' seja criada e atualizada ao iniciar.
+    # Primeiro, ele verifica se composer.json existe, depois instala as dependências.
+    command: >
+      bash -c "if [ -f composer.json ]; then composer install; fi && apache2-foreground"
+    depends_on:
+      - db
+  db:
+    container_name: saep_bd
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: lost_and_found_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    # CORREÇÃO: Utilizando o nome do fuso horário para maior compatibilidade.
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-time-zone=America/Sao_Paulo"
+    ports:
+      - "3608:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db_init:/docker-entrypoint-initdb.d
+      - ./config/mysql/charset-defaults.cnf:/etc/mysql/conf.d/charset-defaults.cnf
+volumes:
+  db_data:
