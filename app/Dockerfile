@@ -20,8 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 2. Configurar e instalar extensões PHP
 RUN docker-php-ext-configure ldap \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install -j$(nproc) ldap mysqli pdo pdo_mysql gd zip \
-    && docker-php-ext-enable ldap mysqli pdo pdo_mysql gd zip
+    && docker-php-ext-install -j$(nproc) ldap mysqli pdo pdo_mysql gd zip exif \
+    && docker-php-ext-enable ldap mysqli pdo pdo_mysql gd zip exif
 
 # NOVO: Copiar as configurações customizadas do PHP para aumentar o limite de upload
 COPY uploads.ini /usr/local/etc/php/conf.d/uploads.ini
