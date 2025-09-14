@@ -6,6 +6,68 @@ require_once '../db_connect.php';
 start_secure_session();
 require_admin('../index.php'); // Ensure only admins can edit items
 
+// Função para processar upload de imagem com verificação de tipo real
+function processUploadedImage($file_key, &$error_message) {
+    if (isset($_FILES[$file_key]) && $_FILES[$file_key]['error'] == 0) {
+        $upload_dir_fs = '../uploads/images/'; // Path for filesystem operations
+        $upload_dir_db = 'uploads/images/';   // Path to be stored in the DB
+
+        if (!is_dir($upload_dir_fs)) {
+            mkdir($upload_dir_fs, 0755, true);
+        }
+
+        $max_size = 5 * 1024 * 1024; // 5MB
+
+        if ($_FILES[$file_key]['size'] > $max_size) {
+            $error_message = 'Arquivo de imagem (' . htmlspecialchars($_FILES[$file_key]['name']) . ') muito grande! O tamanho máximo permitido é 5MB.';
+            return false;
+        }
+
+        $temp_path = $_FILES[$file_key]['tmp_name'];
+
+        $image_type = exif_imagetype($temp_path);
+
+        $image = null;
+        switch ($image_type) {
+            case IMAGETYPE_JPEG:
+                $image = imagecreatefromjpeg($temp_path);
+                break;
+            case IMAGETYPE_PNG:
+                $image = imagecreatefrompng($temp_path);
+                break;
+            case IMAGETYPE_GIF:
+                $image = imagecreatefromgif($temp_path);
+                break;
+            case IMAGETYPE_WEBP:
+                $image = imagecreatefromwebp($temp_path);
+                break;
+            default:
+                $error_message = 'Formato de imagem inválido ou arquivo corrompido (' . htmlspecialchars($_FILES[$file_key]['name']) . ')! Apenas JPG, PNG, GIF e WEBP são aceitos.';
+                return false;
+        }
+
+        if ($image) {
+            $new_filename = uniqid('item_', true) . '.webp';
+            $image_path_fs = $upload_dir_fs . $new_filename;
+            $image_path_db = $upload_dir_db . $new_filename;
+
+            if (imagewebp($image, $image_path_fs, 15)) {
+                imagedestroy($image);
+                return $image_path_db; // Success, return path for DB
+            } else {
+                $error_message = 'Falha ao converter ou salvar a imagem (' . htmlspecialchars($_FILES[$file_key]['name']) . ') como WebP.';
+                imagedestroy($image);
+                return false;
+            }
+        } else {
+            $error_message = 'Não foi possível processar a imagem (' . htmlspecialchars($_FILES[$file_key]['name']) . '). Verifique o arquivo.';
+            return false;
+        }
+    }
+    return null; // No file uploaded or non-critical error
+}
+
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $item_id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
     $name = trim($_POST['name'] ?? '');
@@ -46,50 +108,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit();
     }
 
-    $new_image_path = $current_image_path; // Assume no changes initially.
-    $delete_image = filter_input(INPUT_POST, 'delete_image', FILTER_VALIDATE_INT);
+    $new_image_path = $current_image_path; // Default to current image
+    $upload_error = null;
 
-    // 1. Handle image deletion request
-    if ($delete_image) {
-        if (!empty($current_image_path) && file_exists('../' . $current_image_path)) {
-            unlink('../' . $current_image_path);
-        }
-        $new_image_path = null; // Set path to null for DB update
-    }
-
-    // 2. Handle new image upload
+    // Check for new image upload first
     if (isset($_FILES['item_image']) && $_FILES['item_image']['error'] == 0) {
-        // First, if a new image is uploaded, delete the old one.
-        if (!empty($current_image_path) && file_exists('../' . $current_image_path)) {
-            unlink('../' . $current_image_path);
-        }
+        $processed_path = processUploadedImage('item_image', $upload_error);
 
-        $upload_dir = '../uploads/images/';
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0755, true);
-        }
-
-        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-        $max_size = 5 * 1024 * 1024; // 5MB
-
-        if (in_array($_FILES['item_image']['type'], $allowed_types) && $_FILES['item_image']['size'] <= $max_size) {
-            $file_ext = pathinfo($_FILES['item_image']['name'], PATHINFO_EXTENSION);
-            $new_filename = uniqid('item_', true) . '.' . $file_ext;
-            // The path stored in DB should be relative to the project root (where index.php is), not admin/
-            $db_image_path = 'uploads/images/' . $new_filename;
-            $full_upload_path = $upload_dir . $new_filename;
-
-            if (move_uploaded_file($_FILES['item_image']['tmp_name'], $full_upload_path)) {
-                $new_image_path = $db_image_path;
-            } else {
-                $_SESSION['admin_page_error_message'] = 'Falha ao mover o novo arquivo de imagem.';
-                header('Location: edit_item_page.php?id=' . $item_id . '&error=uploadfail');
-                exit();
-            }
-        } else {
-            $_SESSION['admin_page_error_message'] = 'Arquivo de imagem inválido! Verifique o tamanho (máx 5MB) e o formato (JPG, PNG, GIF).';
-            header('Location: edit_item_page.php?id=' . $item_id . '&error=invalidfile');
+        if ($processed_path === false) {
+            // Error during processing
+            $_SESSION['admin_page_error_message'] = $upload_error;
+            header('Location: edit_item_page.php?id=' . $item_id);
             exit();
+        }
+
+        // If processing was successful, a new image was uploaded.
+        // Delete the old one if it exists.
+        if ($processed_path !== null) {
+            if (!empty($current_image_path) && file_exists('../' . $current_image_path)) {
+                unlink('../' . $current_image_path);
+            }
+            $new_image_path = $processed_path;
+        }
+    } else {
+        // No new image uploaded, check if we need to delete the existing one
+        $delete_image = filter_input(INPUT_POST, 'delete_image', FILTER_VALIDATE_INT);
+        if ($delete_image) {
+            if (!empty($current_image_path) && file_exists('../' . $current_image_path)) {
+                unlink('../' . $current_image_path);
+            }
+            $new_image_path = null; // Set path to null for DB update
         }
     }
 
